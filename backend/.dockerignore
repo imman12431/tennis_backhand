@@ -1,0 +1,14 @@
+# Local virtualenv (rebuilt inside the image by uv)
+.venv/
+__pycache__/
+*.pyc
+
+# Per-job working files
+jobs/
+/tmp/
+
+# Misc
+.DS_Store
+*.ipynb
+.git/
+README.md
