@@ -145,6 +145,18 @@ def list_demos():
     return [{"id": k, "name": v[0]} for k, v in DEMOS.items()]
 
 
+@app.get("/demo/{demo_id}")
+def get_demo(demo_id: str):
+    """Stream a demo video by id (sinner, djokovic, etc)."""
+    if demo_id not in DEMOS:
+        raise HTTPException(status_code=404, detail="Demo not found")
+    _, filename = DEMOS[demo_id]
+    path = os.path.join(DEMOS_DIR, filename)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path, media_type="video/mp4")
+
+
 @app.post("/detect", status_code=202)
 async def detect(file: UploadFile = File(None), demo: str = Form(None)):
     """Submit a detection job from either an uploaded mp4 or a demo id."""

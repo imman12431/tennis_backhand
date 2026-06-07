@@ -6,6 +6,7 @@ import {
   submitJob,
   getStatus,
   clipUrl,
+  API_BASE,
   type Demo,
   type JobStatus,
 } from "@/lib/api";
@@ -129,27 +130,41 @@ export default function Home() {
         </div>
 
         {source === "demo" ? (
-          <div className="row">
-            {demos.length === 0 && (
-              <span className="muted">
-                No demos available (is the backend running?).
-              </span>
+          <div>
+            <div className="row" style={{ marginBottom: 16 }}>
+              {demos.length === 0 && (
+                <span className="muted">
+                  No demos available (is the backend running?).
+                </span>
+              )}
+              {demos.map((d) => (
+                <label
+                  key={d.id}
+                  className={`choice ${selectedDemo === d.id ? "selected" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="demo"
+                    checked={selectedDemo === d.id}
+                    onChange={() => setSelectedDemo(d.id)}
+                    disabled={busy}
+                  />
+                  {d.name}
+                </label>
+              ))}
+            </div>
+            {selectedDemo && (
+              <video
+                src={`${API_BASE}/demo/${selectedDemo}`}
+                controls
+                style={{
+                  width: "100%",
+                  maxWidth: "500px",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              />
             )}
-            {demos.map((d) => (
-              <label
-                key={d.id}
-                className={`choice ${selectedDemo === d.id ? "selected" : ""}`}
-              >
-                <input
-                  type="radio"
-                  name="demo"
-                  checked={selectedDemo === d.id}
-                  onChange={() => setSelectedDemo(d.id)}
-                  disabled={busy}
-                />
-                {d.name}
-              </label>
-            ))}
           </div>
         ) : (
           <div>
