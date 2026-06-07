@@ -11,11 +11,13 @@ WORKDIR /app
 ENV TF_USE_LEGACY_KERAS=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=300 \
     JOBS_DIR=/tmp/tennis_jobs
 
 # Install dependencies first (cached layer) from the locked manifest.
+# A cache mount keeps downloaded wheels across builds so retries don't re-fetch.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 
 # App code + model assets.
 COPY . .
