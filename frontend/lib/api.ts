@@ -4,6 +4,60 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:7860";
 
+// Retry configuration
+const RETRY_CONFIG = {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+};
+
+// Fetch with exponential backoff retry
+async function fetchWithRetry(
+  url: string,
+  options?: RequestInit,
+  attempt = 1
+): Promise<Response> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    // Don't retry 4xx errors (client errors) — they won't succeed on retry
+    if (response.status >= 400 && response.status < 500) {
+      return response;
+    }
+
+    // Retry on 5xx (server errors) and network timeouts
+    if (!response.ok && attempt < RETRY_CONFIG.maxAttempts) {
+      const delay = Math.min(
+        RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt - 1),
+        RETRY_CONFIG.maxDelayMs
+      );
+      await new Promise((r) => setTimeout(r, delay));
+      return fetchWithRetry(url, options, attempt + 1);
+    }
+
+    return response;
+  } catch (error) {
+    // Retry on network errors (timeout, connection refused, etc)
+    if (attempt < RETRY_CONFIG.maxAttempts) {
+      const delay = Math.min(
+        RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt - 1),
+        RETRY_CONFIG.maxDelayMs
+      );
+      await new Promise((r) => setTimeout(r, delay));
+      return fetchWithRetry(url, options, attempt + 1);
+    }
+    throw error;
+  }
+}
+
 export type Demo = { id: string; name: string };
 
 export type JobStatus = {
@@ -14,7 +68,7 @@ export type JobStatus = {
 };
 
 export async function listDemos(): Promise<Demo[]> {
-  const res = await fetch(`${API_BASE}/demos`);
+  const res = await fetchWithRetry(`${API_BASE}/demos`);
   if (!res.ok) throw new Error(`Failed to load demos (${res.status})`);
   return res.json();
 }
@@ -28,7 +82,10 @@ export async function submitJob(input: {
   if (input.demo) form.append("demo", input.demo);
   if (input.file) form.append("file", input.file);
 
-  const res = await fetch(`${API_BASE}/detect`, { method: "POST", body: form });
+  const res = await fetchWithRetry(`${API_BASE}/detect`, {
+    method: "POST",
+    body: form,
+  });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`Detection request failed (${res.status}) ${detail}`);
@@ -38,7 +95,7 @@ export async function submitJob(input: {
 }
 
 export async function getStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetch(`${API_BASE}/status/${jobId}`);
+  const res = await fetchWithRetry(`${API_BASE}/status/${jobId}`);
   if (!res.ok) throw new Error(`Failed to fetch status (${res.status})`);
   return res.json();
 }

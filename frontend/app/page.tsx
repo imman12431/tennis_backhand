@@ -87,7 +87,20 @@ export default function Home() {
     } catch (e: any) {
       setWarming(false);
       setPhase("error");
-      setError(e?.message || "Could not start detection");
+
+      // Provide helpful error messages
+      let errorMsg = "Could not start detection";
+      if (e instanceof TypeError) {
+        errorMsg = "Network error — check your connection and try again";
+      } else if (e?.message?.includes("413")) {
+        errorMsg = "File too large — max 60 MB";
+      } else if (e?.message?.includes("415")) {
+        errorMsg = "Invalid file type — MP4 only";
+      } else if (e?.message) {
+        errorMsg = e.message;
+      }
+
+      setError(errorMsg);
     }
   }
 
