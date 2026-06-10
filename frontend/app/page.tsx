@@ -26,6 +26,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Load demo list on mount.
   useEffect(() => {
@@ -40,9 +41,13 @@ export default function Home() {
   // Poll status whenever we have an active job.
   useEffect(() => {
     if (!jobId) return;
+
+    // Create abort controller for this polling session
+    abortRef.current = new AbortController();
+
     const tick = async () => {
       try {
-        const s = await getStatus(jobId);
+        const s = await getStatus(jobId, { signal: abortRef.current!.signal });
         setWarming(false); // got a response → backend is awake
         setStatus(s);
         if (s.status === "done") {
@@ -55,13 +60,25 @@ export default function Home() {
         } else {
           setPhase("running");
         }
-      } catch {
-        // transient error while waking/processing — keep polling
+      } catch (e) {
+        // Ignore abort errors (cleanup), continue polling on other errors
+        if (!(e instanceof Error && e.name === "AbortError")) {
+          // transient error while waking/processing — keep polling
+        }
       }
     };
+
     tick();
     pollRef.current = setInterval(tick, 1500);
-    return stopPolling;
+
+    return () => {
+      stopPolling();
+      // Cleanup: abort any in-flight requests
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
@@ -69,6 +86,11 @@ export default function Home() {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
+    }
+    // Abort any pending requests
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
     }
   }
 

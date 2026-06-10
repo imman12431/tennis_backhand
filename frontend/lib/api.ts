@@ -21,9 +21,22 @@ async function fetchWithRetry(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
+    // Use existing abort signal if provided, otherwise use our timeout signal
+    const signal =
+      options?.signal ||
+      (() => {
+        // If both signals exist, create a composite that aborts on either
+        if (options?.signal) {
+          const composite = new AbortController();
+          options.signal.addEventListener("abort", () => composite.abort());
+          return composite.signal;
+        }
+        return controller.signal;
+      })();
+
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal,
+      signal,
     });
 
     clearTimeout(timeoutId);
@@ -45,6 +58,11 @@ async function fetchWithRetry(
 
     return response;
   } catch (error) {
+    // Don't retry if the request was aborted (user cleanup)
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+
     // Retry on network errors (timeout, connection refused, etc)
     if (attempt < RETRY_CONFIG.maxAttempts) {
       const delay = Math.min(
@@ -94,8 +112,11 @@ export async function submitJob(input: {
   return data.job_id as string;
 }
 
-export async function getStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetchWithRetry(`${API_BASE}/status/${jobId}`);
+export async function getStatus(
+  jobId: string,
+  options?: RequestInit
+): Promise<JobStatus> {
+  const res = await fetchWithRetry(`${API_BASE}/status/${jobId}`, options);
   if (!res.ok) throw new Error(`Failed to fetch status (${res.status})`);
   return res.json();
 }
