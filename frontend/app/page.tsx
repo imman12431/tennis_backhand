@@ -24,7 +24,6 @@ export default function Home() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showOverview, setShowOverview] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -141,29 +140,21 @@ export default function Home() {
 
       {/* Project Overview */}
       <section className="card overview-card">
-        <button
-          className="overview-toggle"
-          onClick={() => setShowOverview(!showOverview)}
-          aria-expanded={showOverview}
-        >
-          {showOverview ? "▼" : "▶"} How it works
-        </button>
-        {showOverview && (
-          <div className="overview-content">
-            <p>
-              This project detects and extracts tennis backhand shots from match videos using a <strong>frame-wise, pose-based classification pipeline with multi-stage filtering</strong>.
-            </p>
-            <p>
-              Each video is processed frame by frame using <strong>MediaPipe Pose Landmarker (lite model)</strong> to extract 33 body keypoints. From these keypoints, a <strong>hand-engineered, normalized skeletal feature vector</strong> is constructed using joint positions relative to the mid-hip and scaled by shoulder width, with landmark visibility included as additional features.
-            </p>
-            <p>
-              The resulting feature vectors are classified using a trained <strong>TensorFlow/Keras neural network</strong>, followed by a second <strong>binary rejector model</strong> that filters false positives. High-confidence backhand detections trigger a <strong>cooldown window</strong> to prevent duplicate detections of the same stroke.
-            </p>
-            <p>
-              For performance, the system uses <strong>multi-threaded frame decoding</strong> and performs detection in a <strong>first pass</strong>, followed by a <strong>second pass</strong> that cuts short MP4 clips around each detected backhand using <strong>OpenCV and FFmpeg</strong>.
-            </p>
-          </div>
-        )}
+        <h2>How it works</h2>
+        <div className="overview-content">
+          <p>
+            This project detects and extracts tennis backhand shots from match videos using a <strong>frame-wise, pose-based classification pipeline with multi-stage filtering</strong>.
+          </p>
+          <p>
+            Each video is processed frame by frame using <strong>MediaPipe Pose Landmarker (lite model)</strong> to extract 33 body keypoints. From these keypoints, a <strong>hand-engineered, normalized skeletal feature vector</strong> is constructed using joint positions relative to the mid-hip and scaled by shoulder width, with landmark visibility included as additional features.
+          </p>
+          <p>
+            The resulting feature vectors are classified using a trained <strong>TensorFlow/Keras neural network</strong>, followed by a second <strong>binary rejector model</strong> that filters false positives. High-confidence backhand detections trigger a <strong>cooldown window</strong> to prevent duplicate detections of the same stroke.
+          </p>
+          <p>
+            For performance, the system uses <strong>multi-threaded frame decoding</strong> and performs detection in a <strong>first pass</strong>, followed by a <strong>second pass</strong> that cuts short MP4 clips around each detected backhand using <strong>OpenCV and FFmpeg</strong>.
+          </p>
+        </div>
       </section>
 
       {/* 1. Choose a video */}
