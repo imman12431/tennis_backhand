@@ -198,3 +198,48 @@ input[type="file"] {
   color: var(--muted);
   font-size: 0.9rem;
 }
+
+.overview-card {
+  background: var(--panel);
+}
+
+.overview-toggle {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.15s;
+  width: 100%;
+  text-align: left;
+}
+
+.overview-toggle:hover {
+  color: var(--text);
+}
+
+.overview-content {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  line-height: 1.6;
+}
+
+.overview-content p {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.overview-content p:last-child {
+  margin-bottom: 0;
+}
+
+.overview-content strong {
+  color: var(--accent-2);
+}
