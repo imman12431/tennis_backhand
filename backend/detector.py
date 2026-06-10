@@ -4,6 +4,7 @@ import gc
 import numpy as np
 import tensorflow as tf
 import joblib
+import logging
 from mediapipe.tasks import python
 import mediapipe as mp
 import threading
@@ -11,6 +12,8 @@ import queue
 
 # Absolute base dir so model/asset paths work regardless of the process cwd
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------
@@ -37,7 +40,8 @@ def write_video_clip(output_path, frames, fps):
 
     writer.release()
 
-    print(f"[DEBUG] Temp AVI created: {temp_avi}, size: {os.path.getsize(temp_avi)}")
+    avi_size = os.path.getsize(temp_avi)
+    logger.debug(f"Temp AVI created: {temp_avi} ({avi_size} bytes)")
 
     # Convert AVI to MP4 using ffmpeg if available
     try:
@@ -50,18 +54,18 @@ def write_video_clip(output_path, frames, fps):
             output_path
         ], check=True, capture_output=True, timeout=10)
 
-        print(f"[DEBUG] FFmpeg conversion SUCCESS")
-        print(f"[DEBUG] MP4 created: {output_path}, size: {os.path.getsize(output_path)}")
+        mp4_size = os.path.getsize(output_path)
+        logger.info(f"FFmpeg conversion successful: {output_path} ({mp4_size} bytes)")
 
         # Success - remove temp file and return MP4
         os.remove(temp_avi)
         return output_path
 
     except Exception as e:
-        print(f"[DEBUG] FFmpeg conversion FAILED: {e}")
+        logger.warning(f"FFmpeg conversion failed, falling back to AVI: {e}")
         # FFmpeg failed or not available - just rename AVI to MP4
         os.rename(temp_avi, output_path)
-        print(f"[DEBUG] Renamed AVI to MP4: {output_path}")
+        logger.info(f"Renamed AVI to MP4: {output_path}")
         return output_path
 
 

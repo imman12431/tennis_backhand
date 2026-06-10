@@ -19,12 +19,23 @@ import shutil
 import time
 import uuid
 import threading
+import logging
+import sys
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from detector import detect_backhands
+
+# Configure logging
+_log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, _log_level),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEMOS_DIR = os.path.join(BASE_DIR, "demos")
@@ -78,8 +89,14 @@ def _sweep_old_jobs():
         ]
         for jid in stale:
             jobs.pop(jid, None)
-    for jid in stale:
-        shutil.rmtree(os.path.join(JOBS_DIR, jid), ignore_errors=True)
+
+    if stale:
+        logger.info(f"Cleaning up {len(stale)} expired jobs")
+        for jid in stale:
+            try:
+                shutil.rmtree(os.path.join(JOBS_DIR, jid), ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"Failed to delete job dir {jid}: {e}")
 
 
 def _run_job(job_id, video_path, output_dir):
@@ -89,9 +106,11 @@ def _run_job(job_id, video_path, output_dir):
         with jobs_lock:
             jobs[job_id]["logs"].append(text)
 
+    logger.info(f"Job {job_id}: queued")
     # Serialize the heavy work so two videos don't blow the container's RAM.
     log("Queued — waiting for a free worker…")
     with detection_lock:
+        logger.info(f"Job {job_id}: starting detection")
         try:
             log("Starting…")
             clips = detect_backhands(
@@ -102,7 +121,9 @@ def _run_job(job_id, video_path, output_dir):
             with jobs_lock:
                 jobs[job_id]["clips"] = [os.path.basename(p) for p in clips]
                 jobs[job_id]["status"] = "done"
-        except Exception as e:  # surface the failure to the client
+            logger.info(f"Job {job_id}: completed with {len(clips)} clips")
+        except Exception as e:
+            logger.exception(f"Job {job_id}: detection failed")
             with jobs_lock:
                 jobs[job_id]["status"] = "error"
                 jobs[job_id]["error"] = str(e)
@@ -129,6 +150,7 @@ def _start_job(video_path):
         args=(job_id, video_path, output_dir),
         daemon=True,
     ).start()
+    logger.debug(f"Started job {job_id} for {video_path}")
     return job_id
 
 
@@ -164,16 +186,21 @@ async def detect(file: UploadFile = File(None), demo: str = Form(None)):
 
     if demo:
         if demo not in DEMOS:
+            logger.warning(f"Unknown demo requested: {demo}")
             raise HTTPException(404, f"Unknown demo '{demo}'")
         video_path = os.path.join(DEMOS_DIR, DEMOS[demo][1])
         if not os.path.exists(video_path):
+            logger.error(f"Demo video missing: {video_path}")
             raise HTTPException(500, "Demo video missing on server")
+        logger.info(f"Requested demo: {demo}")
         return {"job_id": _start_job(video_path)}
 
     if file is None:
+        logger.warning("POST /detect with no file or demo")
         raise HTTPException(400, "Provide either an uploaded 'file' or a 'demo' id")
 
     if file.content_type not in ("video/mp4", "application/octet-stream"):
+        logger.warning(f"Invalid content type: {file.content_type}")
         raise HTTPException(415, "Only MP4 uploads are supported")
 
     # Read with a hard size cap so a huge upload can't exhaust memory/disk.
@@ -183,6 +210,7 @@ async def detect(file: UploadFile = File(None), demo: str = Form(None)):
     video_path = os.path.join(job_root, "input.mp4")
 
     size = 0
+    logger.info(f"Job {job_id}: receiving upload {file.filename}")
     with open(video_path, "wb") as out:
         while True:
             chunk = await file.read(1024 * 1024)
@@ -192,6 +220,7 @@ async def detect(file: UploadFile = File(None), demo: str = Form(None)):
             if size > MAX_UPLOAD_BYTES:
                 out.close()
                 shutil.rmtree(job_root, ignore_errors=True)
+                logger.warning(f"Job {job_id}: upload exceeds limit ({size} bytes)")
                 raise HTTPException(
                     413,
                     f"Upload exceeds {MAX_UPLOAD_BYTES // (1024*1024)} MB limit",
@@ -200,8 +229,10 @@ async def detect(file: UploadFile = File(None), demo: str = Form(None)):
 
     if size == 0:
         shutil.rmtree(job_root, ignore_errors=True)
+        logger.warning(f"Job {job_id}: empty upload")
         raise HTTPException(400, "Empty upload")
 
+    logger.info(f"Job {job_id}: upload complete ({size} bytes)")
     # Reuse the pre-created job_id/dir for this upload job.
     output_dir = os.path.join(job_root, "outputs")
     os.makedirs(output_dir, exist_ok=True)
@@ -226,6 +257,7 @@ def status(job_id: str):
     with jobs_lock:
         job = jobs.get(job_id)
         if job is None:
+            logger.debug(f"Status requested for unknown job: {job_id}")
             raise HTTPException(404, "Unknown job")
         return {
             "status": job["status"],
@@ -239,8 +271,11 @@ def status(job_id: str):
 def get_clip(job_id: str, filename: str):
     # Guard against path traversal — only allow plain basenames.
     if filename != os.path.basename(filename):
+        logger.warning(f"Path traversal attempt: {job_id}/{filename}")
         raise HTTPException(400, "Invalid filename")
     path = os.path.join(JOBS_DIR, job_id, "outputs", filename)
     if not os.path.exists(path):
+        logger.debug(f"Clip not found: {path}")
         raise HTTPException(404, "Clip not found")
+    logger.debug(f"Serving clip: {path}")
     return FileResponse(path, media_type="video/mp4", filename=filename)
