@@ -26,7 +26,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from detector import detect_backhands
+from core.detector import detect_backhands
 
 # Configure logging
 _log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -37,8 +37,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DEMOS_DIR = os.path.join(BASE_DIR, "demos")
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEMOS_DIR = os.path.join(APP_ROOT, "demos")
 # Per-job working dirs. Defaults to a tmp path so it's writable even when the
 # container runs as a non-root user (e.g. Hugging Face Spaces); override with
 # the JOBS_DIR env var.

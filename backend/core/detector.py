@@ -11,7 +11,7 @@ import threading
 import queue
 
 # Absolute base dir so model/asset paths work regardless of the process cwd
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 logger = logging.getLogger(__name__)
 
