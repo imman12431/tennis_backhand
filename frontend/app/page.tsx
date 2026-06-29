@@ -15,6 +15,9 @@ type Phase = "idle" | "submitting" | "running" | "done" | "error";
 
 export default function Home() {
   const [demos, setDemos] = useState<Demo[]>([]);
+  const [demosLoading, setDemosLoading] = useState(true);
+  const [demosError, setDemosError] = useState(false);
+  const [demosRetrying, setDemosRetrying] = useState(false);
   const [source, setSource] = useState<"demo" | "upload">("demo");
   const [selectedDemo, setSelectedDemo] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
@@ -27,16 +30,45 @@ export default function Home() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const demosAbortRef = useRef<AbortController | null>(null);
 
   // Load demo list on mount.
   useEffect(() => {
-    listDemos()
-      .then((d) => {
+    loadDemos();
+    return () => {
+      demosAbortRef.current?.abort();
+    };
+  }, []);
+
+  async function loadDemos() {
+    setDemosLoading(true);
+    setDemosError(false);
+    setDemosRetrying(false);
+
+    demosAbortRef.current?.abort();
+    demosAbortRef.current = new AbortController();
+    const signal = demosAbortRef.current.signal;
+
+    while (!signal.aborted) {
+      try {
+        const d = await listDemos();
         setDemos(d);
         if (d.length) setSelectedDemo(d[0].id);
-      })
-      .catch(() => setDemos([]));
-  }, []);
+        setDemosError(false);
+        setDemosRetrying(false);
+        break;
+      } catch {
+        if (signal.aborted) break;
+        setDemosError(true);
+        setDemosRetrying(true);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    }
+
+    if (!signal.aborted) {
+      setDemosLoading(false);
+    }
+  }
 
   // Poll status whenever we have an active job.
   useEffect(() => {
@@ -185,12 +217,33 @@ export default function Home() {
 
         {source === "demo" ? (
           <div>
+            {demosLoading && (
+              <div className="warming" style={{ marginBottom: 16 }}>
+                ⏳ Please wait while we load the demo videos for you...
+                {demosRetrying && (
+                  <div>Backend is waking up — retrying every 3 seconds.</div>
+                )}
+              </div>
+            )}
+
+            {!demosLoading && demosError && (
+              <div style={{ marginBottom: 16 }}>
+                <div className="warming">
+                  ⏳ Please wait while we load the demo videos for you.
+                </div>
+                <button className="btn" onClick={loadDemos} style={{ marginTop: 12 }}>
+                  🔄 Retry loading demos
+                </button>
+              </div>
+            )}
+
+            {!demosLoading && demos.length === 0 && !demosError && (
+              <span className="muted">
+                No demos available (is the backend running?).
+              </span>
+            )}
+
             <div className="row" style={{ marginBottom: 16 }}>
-              {demos.length === 0 && (
-                <span className="muted">
-                  No demos available (is the backend running?).
-                </span>
-              )}
               {demos.map((d) => (
                 <label
                   key={d.id}
@@ -201,13 +254,14 @@ export default function Home() {
                     name="demo"
                     checked={selectedDemo === d.id}
                     onChange={() => setSelectedDemo(d.id)}
-                    disabled={busy}
+                    disabled={busy || demosLoading}
                   />
                   {d.name}
                 </label>
               ))}
             </div>
-            {selectedDemo && (
+
+            {selectedDemo && !demosLoading && (
               <video
                 src={`${API_BASE}/demo/${selectedDemo}`}
                 controls
